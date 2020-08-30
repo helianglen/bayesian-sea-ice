@@ -1,1 +1,8 @@
-.ipynb_checkpoints/
+*.aux
+*.log
+*.fdb_latexmk
+*.gz
+*.fls
+*.pytxcode
+.ipynb_checkpoints
+.DS_Store
