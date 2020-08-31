@@ -1,0 +1,256 @@
+\documentclass[12pt, letterpaper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\graphicspath{ {./img/} }
+
+
+\author{Jeff Liu}
+\title{Bayesian Modeling of Polar Sea Ice from IceSat-2 Freeboard Measurements}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+Polar sea ice thickness is of interest to researchers for a variety of reasons including maritime navigation and climate change.
+In 2018, NASA launched the IceSat-2 satellite, which relies a laser altimeter to help study polar sea ice.
+To measure the thickness of this ice, the satellite takes measurements of ``freeboard'', which is the height of the ice above sea water.
+Typically, 7/8 of the ice lies below water, so the freeboard can provide direct inference for the true thickness of the ice;
+however, this measurement is complicated by an unknown amount of snow. Any snow present may weigh down the ice, pushing it deeper into the water,
+which renders this 7/8 rule of thumb inaccurate.
+\\\\
+In response to this complication, scientists have devised a more sophisticated model that incorporates the amount of snow present into
+the relationship between ice thickness and freeboard.
+It relies on three additional parameters: the densities of the surrounding sea water, the sea ice in question, and the snow on top of the ice.
+My goal in this paper is to incorporate this physical model as well as prior knowledge of the parameters to estimate the sea ice thickness
+corresponding to a freeboard measurement of 0.1 meters. I will proceed to evaluate this estimate using Bayesian inference techniques
+by defining a prior and likelihood and measuring the posterior.
+\\\\
+I will first proceed to elaborate on this physical model and formulate the Bayesian process to evaluate the expected ice thickness in section II,
+including discussion of the assumptions, prior, hyper priors, forward model, likelihood functions, and posterior densities.
+Following that, I will discuss the computational strategies for computing the posterior densities, including Markov Chain Monte Carlo,
+in section III. Finally, I will report my model results and analyze model accuracy in section IV, and analyze and discuss the results in section V.
+
+\newpage
+\section{Formulation}
+
+\subsection{Physical Model}
+The physical model relating the ice thickness $H$, snow thickness $S$, and freeboard $H$ is the following:
+\[
+    F = \frac{\rho_w - \rho_i}{\rho_w} \left( H - S \frac{\rho_s}{\rho_w - \rho_i} \right),
+\]
+where $\rho_w$, $\rho_i$, and $\rho_s$ are the densities of the sea water, sea ice, and snow, respectively.
+In the literature, it is given that Arctic seawater density $\rho_w$ ranges from 1010 to 1030 $kg/m^3$,
+sea ice density $\rho_i$ ranges from 750 to 940 $kg/m^3$ while having an average value of 910 $kg / m^3$,
+and snow density averages 300 $kg / m^3$ while ranging from 100 to 400 $kg / m^3$. In addition, I add a constraint
+on sea ice thickness from Dr.\ Matthew Porno's Math 76 lecture on a similar model, where sea ice thickness ranges
+from 0.1 to 5 meters while having an average value of 2 meters. No information is given on snow thickness, but it
+is safe to say that snow thickness must be greater than or equal to zero meters.
+
+\subsection{Assumptions}
+To make this inference possible, I will have to make many assumptions because the given information is quite sparse.
+\\\\
+First, I must give some characterization to a prior density over these parameters. It is helpful that I have a given
+range to work with for the parameters, but I will have to arbitrarily assume variances for all of them.
+The potential bias introduced by of any poorly assumed variances is dampened by the fact that I have a predefined range of possibilities.
+\\\\
+In concert with these variance assumptions, I also assume that the prior densities are truncated Gaussian densities.
+The reason for this choice is twofold. First, Gaussian densities are easily computed, and an added truncation is trivial
+as long as we do not need to integrate to find the normalizing constant. Second, these truncations allow me to impose a strict
+range upon the parameters, which helps with limiting the bias of arbitrarily chosen variances in my first assumption.
+\\\\
+My third assumption is that this model has additive noise. It is given that IceSat-2 can measure ice height within a few centimeters.
+Since this measurement affects only the freeboard, which is not multiplied with anything in the physical model, I am assuming that this error
+is additive. However, I will not make a hyperprior estimate on the exact amount of additive noise, and will reserve that to a hyperprior distribution
+which I will discuss later.
+\\\\
+I will also need to make certain assumptions about the snow depth to make this model more easily computable. I visited a NASA website
+discussing arctic snow depth over sea ice (https://earthobservatory.nasa.gov/images/146758/mapping-snow-on-arctic-sea-ice), and used the graphics
+to semi-arbitrarily decide an average snow depth of 0.15 meters. However, giving an arbitrary estimate of the snow depth variance may
+introduce too much bias into the model since I have no little information. Therefore, I will be modeling this variance as a hyperparameter
+with a hyperprior as well.
+\\\\
+Because I am assuming truncated Gaussians for all prior densities, I will assume that the inverse-Gamma distribution will serve as a proper
+hyperprior on my additive noise/error variance and my snow thickness variance. This is typically chosen for conjugacy reasons,
+which I cannot take advantage of due to my truncations, but the general shape of the distribution is suitable for Gaussian variances anyway.
+The ``hyper-hyper-priors'' $\alpha$ and  $\beta$ of the inverse-Gamma are chosen somewhat arbitrarily,
+but this is not a huge issue since bias in hyper-hyper-parameters have little influence over the posterior. I will discuss my decision strategy
+for these hyper-hyper-priors in a later subsection.
+\\\\
+My final assumption is that the prior parameters are independent. This is actually a poor assumption that I will revisit in the discussion section,
+but I have no way to quantify the covariances of the parameters \emph{a priori}, so I have to make this assumption to make modeling possible.
+Additionally, I make the assumption that the hyperparameters are independent from each other. This allows me to make some simplifications
+using conditional independence in my posterior formulation.
+
+\subsection{Prior Formulation and Densities}
+As I mentioned in the assumptions section, I chose the variances on the three densities rather arbitrarily.
+I estimated the standard deviations of $\rho_w$ to 7, $\rho_i$ to 80, and $\rho_s$ to 90, and squared those to obtain the variances.
+I also set the standard deviation of ice density to 2 meters, equal to the mean, to account for a fair amount of uncertainty, and squared that as well.
+Finally, I guessed a mean standard deviation of snow density equal 0.2 meters, which is very wide. However, this value will not be going straight
+into the prior model, since I will be modeling that standard deviation with an inverse-Gamma hyperprior. It remains useful for getting situated
+and visualizing the prior, though.
+\medskip
+\begin{center}
+\begin{tabular} { |c|c|c|c|c|c| }
+
+\hline
+parameter &  mean  & std.\ dev  & variance    & lower bound & upper bound \\
+\hline
+$\rho_w$  & 1020   &     7      &   49        &   1010      &    1030     \\
+$\rho_i$  &  910   &    80      &   6400      &   750       &    940      \\
+$\rho_s$  &  300   &    90      &   8100      &   100       &     400     \\
+$H$       &  2.0   &    2.0     &   4.0       &   0.1       &    5.0      \\
+$S$       &  0.15  &$\approx0.2$&$\approx0.04$&   0         &    unknown  \\
+\hline
+
+\end{tabular}
+\end{center}
+\medskip
+Plots of the prior are shown on the next page. Note that the snow thickness plot is not a ``true'' prior; it is only an estimate
+based on the hyperprior I will define next.
+
+\begin{figure}[p]
+\caption{Plots of Prior Densities}
+\includegraphics[width=0.5\textwidth]{prior_rw}
+\includegraphics[width=0.5\textwidth]{prior_ri}
+\includegraphics[width=0.5\textwidth]{prior_rs}
+\includegraphics[width=0.5\textwidth]{prior_H}
+\includegraphics[width=0.5\textwidth]{prior_S}
+\end{figure}
+
+\newpage
+\subsection{Hyperprior Formulation and Densities}
+As mentioned in the assumptions, I chose to use inverse-Gamma densities as hyperpriors on the additive noise variance as well as the snow depth variance.
+The Gamma distribution contains two parameters in the typical parametrization: $\alpha$ and $\beta$. These are largely arbitrary for my usage,
+so I did a re-parametrization in terms of mean and variance, and used identities to convert them back to $\alpha$ and $\beta$ (from Wikipedia):
+\[
+    \mu = \frac{\beta}{\alpha - 1} \text{ for } \alpha > 1; \>
+    \sigma^2 = \frac{\beta^2}{(\alpha-1)^2(\alpha-2)} \text{ for } \alpha > 2
+\]
+I chose hyperprior means equal to my estimates of the variances of the snow depth and error noise, which are the squared standard deviations.
+For snow depth, I chose a semi-arbitrary estimate of 0.2 meters as mentioned earlier. For additive noise, I estimated three centimeters
+based on the description of ``accurate to a few centimeters'' on IceSat-2. I chose the hyperprior variances assuming that the standard deviations
+would be equal to the means. After that, I used the sympy package in Python to solve the equations for the hyper-hyper-parameters $\alpha$ and $\beta$.
+Additionally, I also added a small ``nugget'' to each distribution to shift them a tiny bit away from zero to aid computation.
+\medskip
+\begin{center}
+\begin{tabular} { |c|c|c|c|c|c|c| }
+
+\hline
+hyperparameter     &expected mean    &std.\ dev& variance &$\alpha$& $\beta$ & nugget \\
+\hline
+$\sigma^2_\epsilon$&$0.03^2=$ 9.0e-4 &  9e-4   &  8.1e-7  &  3.0   &  0.0018 & 0.0001 \\
+$\sigma^2_S$       &$0.2^2=$ 0.04    &  0.04   &  1.6e-3  &  3.0   &   0.08  &  0.003 \\
+\hline
+
+\end{tabular}
+\end{center}
+\medskip
+
+\begin{figure}[h]
+\caption{Plots of Hyperprior Densities}
+\includegraphics[width=0.5\textwidth]{hypprior_var_eps.png}
+\includegraphics[width=0.5\textwidth]{hypprior_var_S.png}
+\end{figure}
+
+\newpage
+\subsection{Forward Model and Likelihood Function}
+Since I assume an additive Gaussian noise error, the likelihood function is a simple extension of the physical forward model.
+Let $x$ be the five-dimensional vector containing the parameters $\rho_w$, $\rho_i$, $\rho_s$, $H$, and $S$,
+and let $g(x)$ be the forward model predicting some freeboard value $F_{pred}$ from parameters $x$.
+We can then describe the likelihood function as a Gaussian distribution with mean zero and variance $ \sigma^2_\epsilon$,
+evaluated at the difference $F - g(x)$ as observed minus predicted.
+\[
+    f(F | x, \sigma^2_\epsilon) \sim N(0, \sigma^2_\epsilon)
+\]
+This is notably dependent on a variable noise variance, which I will explore in the next subsection on the hierarchical model.
+
+\subsection{Hierarchical Model and Posterior Formulation}
+Now I will proceed to discuss the posterior of the model, which contains hierarchical components regarding the noise and snow variances.
+Traditionally, a non-hierarchical Bayesian model follows Bayes' theorem, the posterior being proportional to the prior times the likelihood:
+\[
+    f(x | F) \propto f(F | x) f(x)
+\]
+However, we have a hierarchical model which tries to incorporate the observation and obtain posterior hyperparameters as well.
+These posterior hyperparameters show up here:
+\[
+    f(x, \sigma^2_\epsilon, \sigma^2_S | F) \propto f(F | x, \sigma^2_\epsilon) f(\sigma^2_\epsilon | \alpha_\epsilon, \beta_\epsilon)
+    f(x | \sigma^2_S) f(\sigma^2_S | \alpha_S, \beta_S)
+\]
+I have dropped a few terms in this equation due to conditional independence. For example, $\sigma_S$ does not show up
+in the likelihood function because F is conditionally independent of $\sigma_S$ given some value of x that has already been evaluated.
+I also make use of my assumption that the two hyperparameter variances are independent as well, to make the joint distribution of
+$\sigma^2_\epsilon$ and $\sigma^2_S$ just equal to the one we are interested in when the other is held constant.
+Finally, I have left out the $\alpha$ and $\beta$ terms on the left side to save space; they are just constants here
+and do not need to be listed, but I'm listing them to make clear which terms are inverse-Gamma hyperpriors.
+\\\\
+I will elaborate on the specific computation of this posterior, as well as the hierarchical separation of the parameters and hyperparameters,
+in the next section.
+
+\subsection{Expected Value of Ice Thickness}
+The solution to my answer is relatively simple after computing the posterior density. Since I am purely making an inference on the parameters,
+I can just compute $\mathbb{E}[x_{post}]$ and then extract the specific expected value and posterior density on ice thickness $H$.
+
+\newpage
+\section{Solution and Computation Strategy}
+
+\subsection{Non-Conjugacy and Markov Chain Monte Carlo}
+My model is non-conjugate in two areas. First, the physical model is simple but non-linear, so no linear algebra identities can be used to
+analytically derive the distributions. Second, I chose to use truncated Gaussians, which have complex normalizing constants that render conjugacy impossible
+in and of itself. These conditions leave sampling as the best technique to derive the posterior, as we can take advantage of the Central Limit
+Theorem to prevent the exponential growth in computational complexity for numerical integration of a multi-dimensional density.
+\\\\
+Within sampling techniques, I chose to use Markov Chain Monte Carlo due to the difficulty of generating direct samples from the truncated prior density.
+
+\subsection{Hierarchical MCMC, Metropolis-Within-Gibbs Sampling}
+With a hierarchical model, it is easier to break up each sampling step into three distinct steps: one for the parameters $x$
+and one for each hyperparameter $\sigma^2_\epsilon$ and $\sigma^2_S$. This technique, called Gibbs sampling, is computationally easier
+to evaluate. In each sub-step, I can hold the other variables constant, reducing the amount of required computation. In addition,
+I free up the hyperparameters to be sampled independently of the parameters. Gibbs sampling will necessitate a modification to 
+the formulation where each parameter and hyperparameter is isolated in the posterior.
+\\\\
+For the sub-step involving the parameters $x$ while the hyperparameters are held constant, the marginal posterior on $x$ looks like this,
+which can then be simplified by dropping $\sigma^2_S$ in the likelihood function and $\sigma^2_\epsilon$ in the prior
+due to our independence and conditional independence assumptions on the parameters.
+\begin{eqnarray*}
+    f(x | F, \sigma^2_\epsilon, \sigma^2_S) & \propto & f(F | x, \sigma^2_\epsilon, \sigma^2_S) f(x | \sigma^2_\epsilon, \sigma^2_S) \\
+                                            & \propto & f(F | x, \sigma^2_\epsilon) f(x | \sigma^2_S)
+\end{eqnarray*}
+For the sub-step involving $\sigma^2_\epsilon$ while $x$ and $\sigma^2_S$ are held constant, the marginal posterior looks like this,
+which can be simplified by dropping dependence on $\sigma^2_S$ entirely (since I assume the two hyperpriors are independent),
+and dropping both dependencies on $x$ and $\sigma^2_S$ in the hyperprior (again due to the same assumption).
+\begin{eqnarray*}
+    f(\sigma^2_\epsilon | F, \sigma^2_S) & \propto & f(F | x, \sigma^2_\epsilon, \sigma^2_S) f(\sigma^2_\epsilon | x, \sigma^2_S) \\
+    f(\sigma^2_\epsilon | F)             & \propto & f(F | x, \sigma^2_\epsilon) f(\sigma^2_\epsilon)
+\end{eqnarray*}
+Finally, for the sub-step involving $\sigma^2_S$ while $x$ and $\sigma^2_\epsilon$ are held constant, the marginal posterior
+looks like this: 
+\begin{eqnarray*}
+    f(\sigma^2_\S | F, \sigma^2_\epsilon) & \propto & f(F | x, \sigma^2_\epsilon, \sigma^2_S) f(\sigma^2_S | x, \sigma^2_\epsilon) \\
+                                          & \propto & f(F | x, \sigma^2_\epsilon) f(x | \sigma^2_S) f(\sigma^2_S)
+\end{eqnarray*}
+In the $\sigma^2_S$ step, I first simplify by dropping $\sigma^2_S$ in the likelihood due to conditional independence given fixed $x$,
+
+
+\subsection{Overview of Software Tools}
+
+\section{Results}
+
+\subsection{Sampling Results and Posterior Densities}
+
+\subsection{Central Limit Theorem, Autocorrelation, and Error Analysis}
+
+\section{Discussion}
+
+\subsection{Sea Ice Thickness}
+
+\subsection{Observations on Posterior}
+
+\subsection{Revisiting Assumptions and Potential Bias}
+
+\end{document}
