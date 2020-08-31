@@ -5,6 +5,7 @@
 \usepackage{amsthm}
 \usepackage[margin=1in]{geometry}
 \usepackage{graphicx}
+\usepackage[ruled,vlined]{algorithm2e}
 \graphicspath{ {./img/} }
 
 
@@ -84,8 +85,8 @@ for these hyper-hyper-priors in a later subsection.
 \\\\
 My final assumption is that the prior parameters are independent. This is actually a poor assumption that I will revisit in the discussion section,
 but I have no way to quantify the covariances of the parameters \emph{a priori}, so I have to make this assumption to make modeling possible.
-Additionally, I make the assumption that the hyperparameters are independent from each other. This allows me to make some simplifications
-using conditional independence in my posterior formulation.
+Additionally, I make the assumption that the hyperparameters are independent from each other, and that the noise variance is also independent
+from the parameters. This allows me to make some simplifications using conditional independence in my posterior formulation.
 
 \subsection{Prior Formulation and Densities}
 As I mentioned in the assumptions section, I chose the variances on the three densities rather arbitrarily.
@@ -172,7 +173,7 @@ This is notably dependent on a variable noise variance, which I will explore in 
 
 \subsection{Hierarchical Model and Posterior Formulation}
 Now I will proceed to discuss the posterior of the model, which contains hierarchical components regarding the noise and snow variances.
-Traditionally, a non-hierarchical Bayesian model follows Bayes' theorem, the posterior being proportional to the prior times the likelihood:
+Traditionally, a non-hierarchical Bayesian model follows Bayes' rule, where the posterior is proportional to the prior times the likelihood:
 \[
     f(x | F) \propto f(F | x) f(x)
 \]
@@ -207,7 +208,7 @@ Theorem to prevent the exponential growth in computational complexity for numeri
 \\\\
 Within sampling techniques, I chose to use Markov Chain Monte Carlo due to the difficulty of generating direct samples from the truncated prior density.
 
-\subsection{Hierarchical MCMC, Metropolis-Within-Gibbs Sampling}
+\subsection{Hierarchical MCMC and Gibbs Sampling}
 With a hierarchical model, it is easier to break up each sampling step into three distinct steps: one for the parameters $x$
 and one for each hyperparameter $\sigma^2_\epsilon$ and $\sigma^2_S$. This technique, called Gibbs sampling, is computationally easier
 to evaluate. In each sub-step, I can hold the other variables constant, reducing the amount of required computation. In addition,
@@ -234,14 +235,111 @@ looks like this:
     f(\sigma^2_\S | F, \sigma^2_\epsilon) & \propto & f(F | x, \sigma^2_\epsilon, \sigma^2_S) f(\sigma^2_S | x, \sigma^2_\epsilon) \\
                                           & \propto & f(F | x, \sigma^2_\epsilon) f(x | \sigma^2_S) f(\sigma^2_S)
 \end{eqnarray*}
-In the $\sigma^2_S$ step, I first simplify by dropping $\sigma^2_S$ in the likelihood due to conditional independence given fixed $x$,
+In the $\sigma^2_S$ step, I first simplify by dropping $\sigma^2_S$ in the likelihood due to conditional independence given fixed $x$.
+Next, I must expand the hyperprior, since I do not have a calculation for the density on $\sigma^2_S$ given $x$.
+I do this expansion using Bayes' rule to ``flip'' the density into something I can calculate, which is just a prior and hyperprior.
+
+\subsection{Metropolis-Within-Gibbs and Proposal Distribution}
+Using these new posterior distributions, I executed my Gibbs sampling using the Metropolis-Hastings rule for each sub-step.
+Together with Gibbs sampling, this creates three ``orthogonal'' walking steps per iteration, and the overall combination of these
+techniques is called Metropolis-Within-Gibbs sampling.
+\\\\
+For the Metropolis-Hastings rule, I chose to use either univariate or multivariate Gaussians for all proposal densities.
+This is convenient because it removes the need to consider the proposal ratios when calculating the acceptance ratio,
+since Gaussians are symmetric. I scaled the proposal standard deviations of the parameters together,
+such that they were equally proportional to their respective prior standard deviations. I chose that scaling factor
+rather arbitrarily though trial-and-error in an attempt to make the autocorrelation as low as possible.
+The proposal standard deviations of my hyperparameters were each chosen independently as well.
+The standard deviations are listed below:
+\medskip
+\begin{center}
+\begin{tabular} { |c|c|c|c|c|c|c| }
+
+\hline
+$\rho_w$ & $\rho_i $& $\rho_s$ & $H$ & $S$ & $\sigma^2_\epsilon$ & $\sigma^2_S$ \\
+\hline
+1.96     & 22.4     & 25.2     &0.56 &0.056&    1.05e-3          & 0.05         \\
+\hline
+
+\end{tabular}
+\end{center}
+\medskip
+Note that since my Metropolis-Hastings step with regard to the first five parameters is contained with one vector $x$,
+so the five standard deviations make up a covariance matrix where there is an independence assumption on the components
+(which was what I assumed). As I have stated in the assumptions section, I will revisit the impact of this in the discussion section.
 
 
 \subsection{Overview of Software Tools}
+To do this computation, I have used the Jupyter Notebook interface with classic Python scientific computing and statistics packages
+such as Matplotlib, Numpy, Scipy, and Sympy. I additionally import a specific function from Pandas for a more sophisticated plot,
+although I do not use Pandas for any data manipulation.
+\\\\
+I wrote most of the code myself, with small parts taken from Dr.\ Parno's example code in places such as plotting, MCMC setup,
+and autocorrelation analysis.
 
+\newpage
+\subsection{Pseudocode}
+Here, I will outline the general algorithmic process I take to compute the Markov Chain Monte Carlo.
+Notably, I will use logarithms of all calculated densities to increase computational performance.
+Additionally, I chose to record 10,000 iterations, since my autocorrelation was rather high.
+
+\medskip
+\begin{algorithm}[H]
+\SetAlgoLined
+\KwResult{Samples from the posterior distributions of the parameters and hyperparameters}
+ 
+Define constants\\
+Set up functions to evaluate the log-prior\\
+Set up functions to evaluate the log-hyperpriors\\
+Set up functions to evaluate the log-likelihood function\\
+Create initial conditions for MCMC and prepare proposal distribution\\
+
+\For{range from 1 to 10000}{
+    propose new point for $x$ and compute the acceptance ratio $\gamma$\\
+    \eIf{random number 0 to 1 $< \gamma$}{
+        set next $x$ to proposed $x$\\
+    }{
+        set next $x$ to previous $x$\\
+    }
+    propose new point for $\sigma^2_\epsilon$ and compute the acceptance ratio $\gamma$\\\\
+    \eIf{random number 0 to 1 $< \gamma$}{
+        set next $\sigma^2_\epsilon$ to proposed $\sigma^2_\epsilon$\\
+    }{
+        set next $\sigma^2_\epsilon$ to previous $\sigma^2_\epsilon$\\
+    }
+    propose new point for $\sigma^2_S$ and compute the acceptance ratio $\gamma$\\\\
+    \eIf{random number 0 to 1 $< \gamma$}{
+        set next $\sigma^2_S$ to proposed $\sigma^2_S$\\
+    }{
+        set next $\sigma^2_S$ to previous $\sigma^2_S$\\
+    }
+}
+
+Record, plot, and analyze results\\
+Compute Integrated Autocorrelation time and standard error\\
+Check Posterior Predictive\\
+\caption{Metropolis-Within-Gibbs MCMC}
+\end{algorithm}
+
+\newpage
 \section{Results}
 
 \subsection{Sampling Results and Posterior Densities}
+After 10,000 iterations, I recorded the following posterior plots:
+\begin{figure}[h]
+\caption{Scatter Matrix of Posterior on $x$}
+\includegraphics[width=\textwidth]{posterior_matrix.png}
+\end{figure}
+
+\begin{figure}[h]
+\caption{Posterior Histograms on Hyperparameters and Ice Thickness}
+\includegraphics[width=\textwidth]{posteriors.png}
+\end{figure}
+
+Out of the five primary parameters, most of the densities remained similar to the priors. However, the snow density $\rho_s$ was shifted down slightly,
+and the variance of the ice thickness $H$ was significantly tightened. Furthermore, observing the scatter matrix, significant covariances were
+found in the posterior. This makes sense; our physical model contains many ratios, which means that the freeboard will stay constant when
+certain parameters move either together or opposite from one another.
 
 \subsection{Central Limit Theorem, Autocorrelation, and Error Analysis}
 
