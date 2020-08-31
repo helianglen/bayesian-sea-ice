@@ -265,7 +265,7 @@ $\rho_w$ & $\rho_i $& $\rho_s$ & $H$ & $S$ & $\sigma^2_\epsilon$ & $\sigma^2_S$ 
 \end{center}
 \medskip
 Note that since my Metropolis-Hastings step with regard to the first five parameters is contained with one vector $x$,
-so the five standard deviations make up a covariance matrix where there is an independence assumption on the components
+the five standard deviations make up a covariance matrix where there is an independence assumption on the components
 (which was what I assumed). As I have stated in the assumptions section, I will revisit the impact of this in the discussion section.
 
 
@@ -330,7 +330,6 @@ After 10,000 iterations, I recorded the following posterior plots:
 \caption{Scatter Matrix of Posterior on $x$}
 \includegraphics[width=\textwidth]{posterior_matrix.png}
 \end{figure}
-
 \begin{figure}[h]
 \caption{Posterior Histograms on Hyperparameters and Ice Thickness}
 \includegraphics[width=\textwidth]{posteriors.png}
@@ -339,16 +338,115 @@ After 10,000 iterations, I recorded the following posterior plots:
 Out of the five primary parameters, most of the densities remained similar to the priors. However, the snow density $\rho_s$ was shifted down slightly,
 and the variance of the ice thickness $H$ was significantly tightened. Furthermore, observing the scatter matrix, significant covariances were
 found in the posterior. This makes sense; our physical model contains many ratios, which means that the freeboard will stay constant when
-certain parameters move either together or opposite from one another.
+certain parameters move in tandem.
+\\\\
+The posteriors on the error and snow variances are have become extremely tight, as seen in the histograms. The ice thickness
+posterior has grown reasonably tight too. Whereas the prior had a mean and standard deviations of 2.0 meters each, the posterior
+has a mean of 1.34 meters and standard deviation of only 0.55 meters. This is still a pretty wide curve, but is an insightful result
+compared to the absolute uncertainty of the prior.
 
 \subsection{Central Limit Theorem, Autocorrelation, and Error Analysis}
+Since I am dealing with samples, the Central Limit Theorem applies to the model accuracy. Because I am working with Markov Chain Monte Carlo,
+each sample is not independent, so the strict CLT does not apply. To use the CLT, I performed autocorrelation analysis to quantify
+the lack of independence between samples.
+\begin{figure}[h]
+\centering
+\caption{Autocorrelation Functions of Posterior w.r.t. Lag}
+\includegraphics[width=0.85\textwidth]{autocorr.png}
+\end{figure}
+\\\\
+The autocorrelation functions for the hyperpriors $\sigma^2_S$ and $\sigma^2_\epsilon$ look excellent, quickly decaying to zero,
+but the five parameters in $x$ are a bit lackluster. They take a long time to decay, and even have a low negative autocorrelation
+for large parts of the chain.
+\\\\
+By integrating the autocorrelation functions, we obtain the integrated autocorrelation time (IACT). This value serves as a coefficient
+in the modified CLT for MCMC. The IACTs for all seven parameters/hyperparameters are below:
+\medskip
+\begin{center}
+\begin{tabular} { |c|c|c|c|c|c|c| }
+
+\hline
+$\rho_w$ & $\rho_i $& $\rho_s$ & $H$ & $S$ & $\sigma^2_\epsilon$ & $\sigma^2_S$ \\
+\hline
+37.81    &  12.36   &  58.08   &15.86&35.04&     1.93            & 1.41         \\
+\hline
+
+\end{tabular}
+\end{center}
+\medskip
+As expected, the IACT indicates fast convergence for the hyperparameters, while the parameters lag behind. This will negatively impact the
+standard error. In addition, something to note is that I did not account for modeling error from negative autocorrelation. The standard
+error should perhaps be even higher to account for this, which is a potential limitation of my model. The full summary statistics of the posterior,
+along with calculated standard error, are below:
+
+\medskip
+\begin{center}
+\begin{tabular} { |c|c|c|c|c|c|c|c| }
+
+\hline
+             &$\rho_w$ & $\rho_i $& $\rho_s$ & $H$ & $S$ & $\sigma^2_\epsilon$ & $\sigma^2_S$ \\
+\hline
+mean         & 1019.91  &887.81    & 267.57  & 1.34& 0.23&    0.001            &  0.043       \\
+std.\ dev    & 4.99     & 40.25    & 69.47   &0.55 & 0.15&    0.003          &   0.0123        \\
+std.\ error  & 0.31     & 1.42     & 5.29     &0.02 &0.01&    4.0e-6         &  1.46e-4         \\
+\hline
+
+\end{tabular}
+\end{center}
+\medskip
+
+\subsection{Posterior Predictive}
+As a final check on my model, I used the samples of the Markov Chain Monte Carlo to also sample a posterior predictive on freeboard.
+I did this by stepping through the iterations and computing the forward model plus a noise value with the current $\sigma^2_\epsilon$.
+\begin{figure}[h]
+\centering
+\caption{Posterior Predictive}
+\includegraphics[width=0.4\textwidth]{predictive.png}
+\end{figure}
+\\\\
+The posterior predictive is understandably very wide to account for a lot of uncertainty, but our measured value of 0.1 is in the middle,
+so this looks qualitatively reasonable.
 
 \section{Discussion}
 
 \subsection{Sea Ice Thickness}
+The original goal of this analysis was to find a posterior on the sea ice thickness, and I have found one. My model estimates that
+the expected value of the ice thickness causing the 0.1 meter freeboard measurement is 1.34 meters thick. As stated earlier,
+my model puts a wide range of possibilities with the 0.55 meter standard deviation, but we nonetheless have a reasonable expectation now.
+Additionally, there is a low standard error of 0.02 meters on this expected value, so we can be reasonably sure that our expectation
+is accurate. With further measurements, this posterior can be further shrunk to more precisely show a range of thickness values.
 
 \subsection{Observations on Posterior}
+The posterior revealed a lot about the internal structure of the model despite only having a single freeboard measurement to work off of.
+For example, it clearly learned the nature of the covariances between the parameters without any additional input. Looking at the
+scatter matrix, we can see that ice density and ice thickness have a strong positive covariance, and ice thickness with snow thickness as well.
+These both reflect intuitive ideas about the physics of sea ice. The denser the ice is, the thicker it will need to be to have enough buoyancy
+to stay floating at the same freeboard. Similarly, the more snow there is, the more ice will be needed to counterbalance the snow mass with
+buoyancy as well. There are likely more nuances in the model that depend on three or more variables acting in tandem, but upon
+initial assumption, this insight is fascinating yet extremely intuitive.
+\\\\
+Some additional observations can be gleaned as well. The model predicts a higher ice density than we originally set in the prior,
+and a lower snow density, although the snow variance is very wide. Furthermore, it predicts a noise standard deviation of only one centimeter,
+which puts pretty high confidence on IceSat-2's precision.
 
 \subsection{Revisiting Assumptions and Potential Bias}
+The model contains a lot of insight, but relies on several assumptions, some of which may be problematic. First of all,
+the model seems to not have affected the water and snow densities much. Selecting a different prior may have made a large difference
+as a result. In general, this model relies heavily on preexisting knowledge because of the tiny amount of data present.
+\\\\
+Another potential source of bias is the independence assumption between the model parameters, and consequently the choice
+of a diagonal covariance matrix for the proposal distribution. As we can see in the posterior scatter matrix, there is clearly
+strong covariance in the model, which does not agree with our prior. I suspect that this strong covariance has to do with the difficulty I
+experienced in getting the autocorrelation functions of my Markov Chains to decay, and it may also be the reason behind the negative covariance.
+When a zero-covariance model is proposed, the acceptance rate will be artificially deflated, since many of the proposal steps will go in the
+``wrong'' direction to the model covariance. This results in an unusually small step size, which can increase autocorrelation. Furthermore,
+The high-covariance nature of the model may lend itself to a ``yo-yo'' like back-and-forth on accepted proposal steps, which can cause negative
+covariance. This negative covariance may be artificially deflating the standard errors of my parameters. However, I still have a large sample size,
+so the convergence of the model should still be sufficient compared to how much uncertainty is already present.
+
+\subsection{Conclusion}
+In conclusion, the model has its issues, but the general uncertainty of the model combined with the large sample size allow its inferences to be valid.
+We can be reasonably sure that the model's wide range of predictions is true to life, as long as our prior distributions are accurate as well.
+With further data, we can hopefully bring our 1.34 meter estimation of the sea ice thickness closer to the true value.
 
 \end{document}
