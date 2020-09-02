@@ -11,7 +11,9 @@ To compute this non-conjugate, non-linear, analytically intractable posterior, I
 Monte Carlo to sample from the distribution. With this technique, I found the following posterior distributions, and estimated an
 ice thickness of 1.34 meters with a standard deviation of 0.55 meters representing the remaining Bayesian uncertainty.
 
-For details, see the project paper and the Jupyter notebook.
+For details, see the project paper and the Jupyter notebook. Note: I have observed that the Jupyter notebook sometimes does not render
+properly on GitHub. If GitHub isn't rendering it right, go to https://nbviewer.jupyter.org/github/jeffzyliu/bayesian-sea-ice/blob/master/IceThickness.ipynb
+which will definitely provide a better render.
 
 ![](img/posteriors.png)
 
