@@ -49,7 +49,7 @@ where $\rho_w$, $\rho_i$, and $\rho_s$ are the densities of the sea water, sea i
 In the literature, it is given that Arctic seawater density $\rho_w$ ranges from 1010 to 1030 $kg/m^3$,
 sea ice density $\rho_i$ ranges from 750 to 940 $kg/m^3$ while having an average value of 910 $kg / m^3$,
 and snow density averages 300 $kg / m^3$ while ranging from 100 to 400 $kg / m^3$. In addition, I add a constraint
-on sea ice thickness from Dr.\ Matthew Porno's Math 76 lecture on a similar model, where sea ice thickness ranges
+on sea ice thickness from Dr.\ Matthew Parno's Math 76 lecture on a similar model, where sea ice thickness ranges
 from 0.1 to 5 meters while having an average value of 2 meters. No information is given on snow thickness, but it
 is safe to say that snow thickness must be greater than or equal to zero meters.
 
@@ -441,7 +441,7 @@ experienced in getting the autocorrelation functions of my Markov Chains to deca
 When a zero-covariance model is proposed, the acceptance rate will be artificially deflated, since many of the proposal steps will go in the
 ``wrong'' direction to the model covariance. This results in an unusually small step size, which can increase autocorrelation. Furthermore,
 The high-covariance nature of the model may lend itself to a ``yo-yo'' like back-and-forth on accepted proposal steps, which can cause negative
-covariance. This negative covariance may be artificially deflating the standard errors of my parameters. However, I still have a large sample size,
+autocorrelation. This negative autocorrelation may be artificially deflating the standard errors of my parameters. However, I still have a large sample size,
 so the convergence of the model should still be sufficient compared to how much uncertainty is already present.
 
 \subsection{Conclusion}
